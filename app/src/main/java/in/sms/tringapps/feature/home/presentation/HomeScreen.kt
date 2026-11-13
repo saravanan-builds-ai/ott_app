@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,16 +29,22 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,28 +53,26 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.PagingData
 import `in`.sms.tringapps.R
-import `in`.sms.tringapps.catalog.domain.model.Stream
 import `in`.sms.tringapps.catalog.domain.model.Video
 import `in`.sms.tringapps.core.designsystem.component.GradientButton
 import `in`.sms.tringapps.core.designsystem.component.ShimmerBox
+import `in`.sms.tringapps.core.designsystem.theme.AccentViolet
 import `in`.sms.tringapps.core.designsystem.theme.BrandGradient
 import `in`.sms.tringapps.core.designsystem.theme.Ink
+import `in`.sms.tringapps.core.designsystem.theme.InkElevated
 import `in`.sms.tringapps.core.designsystem.theme.TextSecondary
-import `in`.sms.tringapps.core.designsystem.theme.TringappsTheme
-import `in`.sms.tringapps.core.ui.VideoDetailsSheet
 import `in`.sms.tringapps.feature.home.presentation.component.HeroCarousel
 import `in`.sms.tringapps.feature.home.presentation.component.HeroPlaceholder
 import `in`.sms.tringapps.feature.home.presentation.component.HomeTestTags
 import `in`.sms.tringapps.feature.home.presentation.component.LibraryEntry
 import `in`.sms.tringapps.feature.home.presentation.component.LibraryRail
-import `in`.sms.tringapps.feature.home.presentation.component.TrendingRail
+import `in`.sms.tringapps.feature.home.presentation.component.TopTenRail
 import `in`.sms.tringapps.feature.home.presentation.component.VideoRail
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -75,6 +80,7 @@ import kotlinx.coroutines.flow.flowOf
 @Composable
 fun HomeRoute(
     onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     onSeeAll: (playlistId: String, title: String) -> Unit,
     onSearch: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -83,10 +89,12 @@ fun HomeRoute(
     HomeScreen(
         state = state,
         onPlay = onPlay,
+        onOpenDetails = onOpenDetails,
         onRetry = viewModel::retry,
+        onRefresh = viewModel::refresh,
+        onRefreshErrorShown = viewModel::onRefreshErrorShown,
         onSeeAll = onSeeAll,
         onSearch = onSearch,
-        onToggleMyList = viewModel::toggleMyList,
         railPaging = viewModel::railPaging,
     )
 }
@@ -95,18 +103,28 @@ fun HomeRoute(
 fun HomeScreen(
     state: HomeUiState,
     onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {},
+    onRefreshErrorShown: () -> Unit = {},
     onSeeAll: (playlistId: String, title: String) -> Unit = { _, _ -> },
     onSearch: () -> Unit = {},
-    onToggleMyList: (Video) -> Unit = {},
     railPaging: (playlistId: String) -> Flow<PagingData<Video>>? = { null },
     autoAdvanceHero: Boolean = true,
     heroPreviewEnabled: Boolean = !LocalInspectionMode.current,
 ) {
     val listState = rememberLazyListState()
-    // Activity handles configuration changes itself, so plain remember survives rotation.
-    var selected by remember { mutableStateOf<Video?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val refreshError = (state as? HomeUiState.Content)?.refreshError
+    val refreshFailedMessage = stringResource(R.string.home_refresh_failed)
+    val currentOnRefreshErrorShown by rememberUpdatedState(onRefreshErrorShown)
+    LaunchedEffect(refreshError) {
+        if (refreshError != null) {
+            snackbarHostState.showSnackbar(refreshFailedMessage)
+            currentOnRefreshErrorShown()
+        }
+    }
 
     Box(
         modifier
@@ -132,8 +150,9 @@ fun HomeScreen(
                         heroPreviewEnabled = heroPreviewEnabled,
                         railPaging = railPaging,
                         onPlay = onPlay,
-                        onShowDetails = { selected = it },
+                        onOpenDetails = onOpenDetails,
                         onSeeAll = onSeeAll,
+                        onRefresh = onRefresh,
                     )
                 }
             }
@@ -141,18 +160,12 @@ fun HomeScreen(
 
         HomeTopBar(listState = listState, solid = state !is HomeUiState.Content, onSearch = onSearch)
 
-        selected?.let { video ->
-            VideoDetailsSheet(
-                video = video,
-                onPlay = {
-                    selected = null
-                    onPlay(it)
-                },
-                onDismiss = { selected = null },
-                isInMyList = (state as? HomeUiState.Content)?.isInMyList(video.mediaId) == true,
-                onToggleMyList = onToggleMyList,
-            )
-        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding(),
+        )
     }
 }
 
@@ -164,6 +177,7 @@ private fun HomeUiState.contentKey() = when (this) {
     is HomeUiState.Content -> ContentKey.CONTENT
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeContent(
     content: HomeUiState.Content,
@@ -172,85 +186,111 @@ private fun HomeContent(
     heroPreviewEnabled: Boolean,
     railPaging: (String) -> Flow<PagingData<Video>>?,
     onPlay: (Video) -> Unit,
-    onShowDetails: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     onSeeAll: (String, String) -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val heroVisible by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val refreshState = rememberPullToRefreshState()
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(HomeTestTags.LIST),
-        contentPadding = PaddingValues(bottom = 32.dp + bottomInset),
-        verticalArrangement = Arrangement.spacedBy(28.dp),
-    ) {
-        item(key = "hero", contentType = "hero") {
-            val heroModifier = Modifier
-                .fillMaxWidth()
-                .fillParentMaxHeight(HERO_HEIGHT_FRACTION)
-                .heightIn(min = 420.dp)
-            when {
-                content.hero.isNotEmpty() -> HeroCarousel(
-                    videos = content.hero,
-                    onPlay = onPlay,
-                    onInfo = onShowDetails,
-                    autoAdvance = autoAdvanceHero,
-                    previewEnabled = heroPreviewEnabled,
-                    isVisible = heroVisible,
-                    modifier = heroModifier,
-                )
-                content.isHeroLoading -> HeroPlaceholder(heroModifier)
-                else -> Spacer(
-                    Modifier
-                        .statusBarsPadding()
-                        .height(56.dp),
-                )
-            }
-        }
-        if (content.continueWatching.isNotEmpty()) {
-            item(key = "continue_watching", contentType = "library") {
-                LibraryRail(
-                    title = stringResource(R.string.home_continue_watching),
-                    entries = content.continueWatching.map { LibraryEntry(it.video, it.progress) },
-                    onVideoClick = onPlay,
-                    testTag = HomeTestTags.CONTINUE_WATCHING,
-                    modifier = Modifier.animateItem(),
-                )
-            }
-        }
-        if (content.trending.isNotEmpty()) {
-            item(key = "trending", contentType = "trending") {
-                TrendingRail(
-                    videos = content.trending,
-                    onVideoClick = onShowDetails,
-                    modifier = Modifier.animateItem(),
-                )
-            }
-        }
-        if (content.myList.isNotEmpty()) {
-            item(key = "my_list", contentType = "library") {
-                LibraryRail(
-                    title = stringResource(R.string.home_my_list),
-                    entries = content.myList.map { LibraryEntry(it) },
-                    onVideoClick = onShowDetails,
-                    testTag = HomeTestTags.MY_LIST,
-                    modifier = Modifier.animateItem(),
-                )
-            }
-        }
-        items(content.rails, key = { it.playlistId }, contentType = { "rail" }) { rail ->
-            val pagingFlow = remember(rail.playlistId, rail.isLoading) {
-                if (rail.isLoading) null else railPaging(rail.playlistId) ?: flowOf(PagingData.from(rail.videos))
-            }
-            VideoRail(
-                rail = rail,
-                pagingFlow = pagingFlow,
-                onVideoClick = onShowDetails,
-                onSeeAll = { onSeeAll(rail.playlistId, rail.title) },
-                modifier = Modifier.animateItem(),
+    PullToRefreshBox(
+        isRefreshing = content.isRefreshing,
+        onRefresh = onRefresh,
+        state = refreshState,
+        modifier = Modifier.fillMaxSize(),
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = refreshState,
+                isRefreshing = content.isRefreshing,
+                containerColor = InkElevated,
+                color = AccentViolet,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 56.dp),
             )
+        },
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(HomeTestTags.LIST),
+            contentPadding = PaddingValues(bottom = 32.dp + bottomInset),
+            verticalArrangement = Arrangement.spacedBy(28.dp),
+        ) {
+            item(key = "hero", contentType = "hero") {
+                val heroModifier = Modifier
+                    .fillMaxWidth()
+                    .fillParentMaxHeight(HERO_HEIGHT_FRACTION)
+                    .heightIn(min = 420.dp)
+                when {
+                    content.hero.isNotEmpty() -> HeroCarousel(
+                        videos = content.hero,
+                        onPlay = onPlay,
+                        onInfo = onOpenDetails,
+                        autoAdvance = autoAdvanceHero,
+                        previewEnabled = heroPreviewEnabled,
+                        isVisible = heroVisible,
+                        modifier = heroModifier,
+                    )
+                    content.isHeroLoading -> HeroPlaceholder(heroModifier)
+                    else -> Spacer(
+                        Modifier
+                            .statusBarsPadding()
+                            .height(56.dp),
+                    )
+                }
+            }
+            val continueWatchingTitle = content.continueWatchingTitle
+            if (continueWatchingTitle != null && content.continueWatching.isNotEmpty()) {
+                item(key = "continue_watching", contentType = "library") {
+                    LibraryRail(
+                        title = stringResource(R.string.home_continue_watching),
+                        entries = content.continueWatching.map { LibraryEntry(it.video, it.progress) },
+                        onVideoClick = onPlay,
+                        testTag = HomeTestTags.CONTINUE_WATCHING,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+            content.featured?.let { featured ->
+                if (content.topTen.isNotEmpty()) {
+                    item(key = "top_ten", contentType = "top_ten") {
+                        TopTenRail(
+                            sectionTitle = featured.title,
+                            videos = content.topTen,
+                            onVideoClick = onOpenDetails,
+                            onSeeAll = { onSeeAll(featured.playlistId, featured.title) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                }
+            }
+            val myListTitle = content.myListTitle
+            if (myListTitle != null && content.myList.isNotEmpty()) {
+                item(key = "my_list", contentType = "library") {
+                    LibraryRail(
+                        title = stringResource(R.string.home_my_list),
+                        entries = content.myList.map { LibraryEntry(it) },
+                        onVideoClick = onOpenDetails,
+                        testTag = HomeTestTags.MY_LIST,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+            items(content.visibleRails, key = { it.playlistId }, contentType = { "rail" }) { rail ->
+                val pagingFlow = remember(rail.playlistId, rail.isLoading, railPaging) {
+                    if (rail.isLoading) null else railPaging(rail.playlistId) ?: flowOf(PagingData.from(rail.videos))
+                }
+                VideoRail(
+                    rail = rail,
+                    pagingFlow = pagingFlow,
+                    onVideoClick = onOpenDetails,
+                    onSeeAll = { onSeeAll(rail.playlistId, rail.title) },
+                )
+            }
         }
     }
 }
@@ -358,38 +398,3 @@ private fun HomeError(kind: HomeErrorKind, onRetry: () -> Unit) {
 }
 
 private const val HERO_HEIGHT_FRACTION = 0.72f
-
-@Preview(showBackground = true, backgroundColor = 0xFF0A0A0F)
-@Composable
-private fun HomeScreenPreview() {
-    val video = Video(
-        mediaId = "abc",
-        title = "Almas pasajeras",
-        description = "A haunting drama about memory and the people we leave behind.",
-        thumbnailUrl = null,
-        backdropUrl = null,
-        durationSeconds = 5566,
-        ageRating = "16+",
-        stream = Stream("https://cdn.jwplayer.com/manifests/abc.m3u8", isHls = true),
-    )
-    TringappsTheme {
-        HomeScreen(
-            state = HomeUiState.Content(
-                hero = listOf(video),
-                trending = listOf(video, video.copy(mediaId = "def")),
-                rails = listOf(RailUiState("p1", "Novedades en cine", listOf(video), isLoading = false)),
-            ),
-            onPlay = {},
-            onRetry = {},
-            autoAdvanceHero = false,
-        )
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF0A0A0F)
-@Composable
-private fun HomeErrorPreview() {
-    TringappsTheme {
-        HomeScreen(state = HomeUiState.Error(HomeErrorKind.NETWORK), onPlay = {}, onRetry = {})
-    }
-}

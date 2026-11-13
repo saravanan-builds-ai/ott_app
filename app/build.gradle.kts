@@ -23,7 +23,6 @@ android {
 
         buildConfigField("String", "JW_BASE_URL", "\"https://cdn.jwplayer.com/\"")
         buildConfigField("String", "JW_CONFIG_ID", "\"kxqzxtpq\"")
-        buildConfigField("String", "JW_TRENDING_PLAYLIST_ID", "\"Mye5LqB6\"")
     }
 
     buildTypes {

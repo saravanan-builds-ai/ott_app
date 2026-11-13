@@ -19,11 +19,6 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 @Retention(AnnotationRetention.BINARY)
 annotation class JwConfigId
 
-/** The JW playlist shown as the "Trending Now" Top 10. */
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class JwTrendingPlaylistId
-
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -36,7 +31,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    fun provideOkHttpClient(
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
+    ): OkHttpClient = OkHttpClient.Builder()
+        .cache(okhttp3.Cache(java.io.File(context.cacheDir, "http_cache"), 20L * 1024 * 1024))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
@@ -49,10 +47,6 @@ object NetworkModule {
     @Provides
     @JwConfigId
     fun provideConfigId(): String = BuildConfig.JW_CONFIG_ID
-
-    @Provides
-    @JwTrendingPlaylistId
-    fun provideTrendingPlaylistId(): String = BuildConfig.JW_TRENDING_PLAYLIST_ID
 
     fun createJwPlayerApi(baseUrl: String, client: OkHttpClient = OkHttpClient()): JwPlayerApi =
         Retrofit.Builder()

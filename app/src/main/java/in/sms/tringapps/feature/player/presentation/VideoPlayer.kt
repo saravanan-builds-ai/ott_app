@@ -61,16 +61,33 @@ fun VideoPlayer(
     var controlsVisible by remember { mutableStateOf(true) }
 
     val player = remember(video.mediaId) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(mediaItem, startPositionMs)
-            playWhenReady = true
-            prepare()
-        }
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
+        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+        ExoPlayer.Builder(context, renderersFactory)
+            .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+            .apply {
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .build()
+                volume = 1f
+                setMediaItem(mediaItem, startPositionMs)
+                playWhenReady = true
+                prepare()
+            }
     }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) = currentOnError()
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                if (player.volume == 0f) player.volume = 1f
+            }
         }
         player.addListener(listener)
         onDispose {

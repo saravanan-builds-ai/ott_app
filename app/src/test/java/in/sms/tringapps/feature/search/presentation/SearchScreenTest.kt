@@ -30,7 +30,7 @@ class SearchScreenTest {
         state: SearchUiState,
         query: String = "",
         onQueryChange: (String) -> Unit = {},
-        onPlay: (Video) -> Unit = {},
+        onOpenDetails: (Video) -> Unit = {},
     ) = composeRule.setContent {
         TringappsTheme {
             SearchScreen(
@@ -38,7 +38,7 @@ class SearchScreenTest {
                 state = state,
                 onQueryChange = onQueryChange,
                 onBack = {},
-                onPlay = onPlay,
+                onOpenDetails = onOpenDetails,
                 autoFocus = false,
             )
         }
@@ -86,15 +86,13 @@ class SearchScreenTest {
     }
 
     @Test
-    fun resultClick_opensDetailsAndPlays() {
-        var played: Video? = null
+    fun resultClick_opensDetails() {
+        var opened: Video? = null
         val video = testVideo("a")
-        setScreen(SearchUiState(SearchStatus.RESULTS, "a", listOf(video)), query = "a", onPlay = { played = it })
+        setScreen(SearchUiState(SearchStatus.RESULTS, "a", listOf(video)), query = "a", onOpenDetails = { opened = it })
 
         composeRule.onNodeWithTag(CatalogTestTags.videoCard("a")).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(CatalogTestTags.DETAILS_PLAY).performClick()
 
-        assertEquals(video, played)
+        assertEquals(video, opened)
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import `in`.sms.tringapps.R
 import `in`.sms.tringapps.catalog.domain.model.Video
 import `in`.sms.tringapps.core.designsystem.component.ShimmerBox
@@ -95,7 +96,8 @@ private fun PagedRow(pagingFlow: Flow<PagingData<Video>>, onVideoClick: (Video) 
         contentPadding = RailPadding,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(count = items.itemCount, contentType = { "video" }) { index ->
+        // Stable keys: the paging source drops duplicates across pages, so media ids are unique.
+        items(count = items.itemCount, key = items.itemKey { it.mediaId }, contentType = { "video" }) { index ->
             items[index]?.let { video ->
                 VideoCard(video = video, onClick = onVideoClick, modifier = Modifier.width(VideoCardWidth))
             }

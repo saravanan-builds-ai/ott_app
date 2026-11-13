@@ -49,7 +49,6 @@ class CatalogRepositoryImplTest {
     private fun TestScope.repository() = CatalogRepositoryImpl(
         api = NetworkModule.createJwPlayerApi(server.url("/").toString()),
         configId = CONFIG_ID,
-        trendingPlaylistId = TRENDING_ID,
         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
     )
 
@@ -120,13 +119,26 @@ class CatalogRepositoryImplTest {
     }
 
     @Test
-    fun `trending reads the first page of the trending playlist`() = runTest {
-        respond(page(TRENDING_ID, 1, 20), playlistJson(next = null))
+    fun `clearCache forces the next request to hit the network`() = runTest {
+        respond(page("P", 1, 25), playlistJson(next = null))
+        val repository = repository()
+        repository.getPlaylistPage("P", 1, 25)
 
-        val videos = repository().getTrending(limit = 20).getOrThrow()
+        repository.clearCache()
+        repository.getPlaylistPage("P", 1, 25)
 
-        assertEquals(2, videos.size)
-        assertEquals(listOf(page(TRENDING_ID, 1, 20)), requested)
+        assertEquals(2, requested.size)
+        assertTrue(repository.cachedVideos().isNotEmpty())
+    }
+
+    @Test
+    fun `paging requests the next page only when JW advertises one`() = runTest {
+        respond(page("P", 1, 25), playlistJson(next = null))
+
+        val items = repository().pagedPlaylist("P", pageSize = 25).asSnapshot { appendScrollWhile { true } }
+
+        assertEquals(2, items.size)
+        assertEquals(listOf(page("P", 1, 25)), requested)
     }
 
     @Test
@@ -171,7 +183,6 @@ class CatalogRepositoryImplTest {
 
     private companion object {
         const val CONFIG_ID = "kxqzxtpq"
-        const val TRENDING_ID = "Mye5LqB6"
 
         val CONFIG_JSON = """
             {"siteName": "Test", "styling": {"backgroundColor": "#111111"},

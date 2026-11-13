@@ -101,21 +101,29 @@ fun VideoCard(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = video.title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (showDescription && video.description.isNotBlank()) {
+        if (video.title.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = video.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val singleLineDescription = remember(video.description) {
+            video.description
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString(" · ")
+        }
+        if (showDescription && singleLineDescription.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
-                text = video.description,
+                text = singleLineDescription,
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 maxLines = 2,
-                minLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

@@ -10,6 +10,18 @@ data class Section(
 
 enum class SectionType { PLAYLIST, CONTINUE_WATCHING, FAVORITES, UNKNOWN }
 
+/**
+ * Home layout derived from the config. Playlist sections are fetched from JW; the special,
+ * user-specific sections are rendered from on-device data but keep their config title.
+ */
+data class HomeLayout(
+    val playlists: List<Section>,
+    /** Playlist flagged `featured` in the config, if any. */
+    val featuredPlaylistId: String?,
+    val continueWatching: Section?,
+    val favorites: Section?,
+)
+
 data class Playlist(
     val id: String,
     val title: String,

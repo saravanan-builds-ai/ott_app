@@ -18,7 +18,6 @@ class FakeCatalogRepository : CatalogRepository {
     /** First page of each playlist. */
     val playlistResults = mutableMapOf<String, Result<Playlist>>()
     val videoResults = mutableMapOf<String, Result<Video>>()
-    var trendingResult: Result<List<Video>> = Result.success(emptyList())
     var cached: List<Video> = emptyList()
 
     /** When set for an id, [getPlaylistPage] suspends until the deferred completes. */
@@ -45,10 +44,15 @@ class FakeCatalogRepository : CatalogRepository {
         return flowOf(PagingData.from(videos))
     }
 
-    override suspend fun getTrending(limit: Int): Result<List<Video>> = trendingResult
-
     override suspend fun getVideo(mediaId: String): Result<Video> =
         videoResults[mediaId] ?: Result.failure(ContentNotFoundException(mediaId))
 
     override fun cachedVideos(): List<Video> = cached
+
+    var clearCacheCalls = 0
+        private set
+
+    override fun clearCache() {
+        clearCacheCalls++
+    }
 }

@@ -54,7 +54,6 @@ import `in`.sms.tringapps.core.designsystem.theme.InkElevated
 import `in`.sms.tringapps.core.designsystem.theme.TextSecondary
 import `in`.sms.tringapps.core.ui.BackTopBar
 import `in`.sms.tringapps.core.ui.VideoCard
-import `in`.sms.tringapps.core.ui.VideoDetailsSheet
 
 object SearchTestTags {
     const val FIELD = "search_field"
@@ -66,7 +65,7 @@ object SearchTestTags {
 @Composable
 fun SearchRoute(
     onBack: () -> Unit,
-    onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,7 +79,7 @@ fun SearchRoute(
             viewModel.onQueryChange(it)
         },
         onBack = onBack,
-        onPlay = onPlay,
+        onOpenDetails = onOpenDetails,
     )
 }
 
@@ -90,11 +89,10 @@ fun SearchScreen(
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
     onBack: () -> Unit,
-    onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     modifier: Modifier = Modifier,
     autoFocus: Boolean = !LocalInspectionMode.current,
 ) {
-    var selected by remember { mutableStateOf<Video?>(null) }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     if (autoFocus) {
@@ -149,21 +147,10 @@ fun SearchScreen(
                 videos = state.videos,
                 onVideoClick = {
                     focusManager.clearFocus()
-                    selected = it
+                    onOpenDetails(it)
                 },
             )
         }
-    }
-
-    selected?.let { video ->
-        VideoDetailsSheet(
-            video = video,
-            onPlay = {
-                selected = null
-                onPlay(it)
-            },
-            onDismiss = { selected = null },
-        )
     }
 }
 

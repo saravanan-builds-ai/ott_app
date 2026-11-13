@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -37,20 +38,28 @@ import `in`.sms.tringapps.R
 import `in`.sms.tringapps.catalog.domain.model.Video
 import `in`.sms.tringapps.core.designsystem.component.RemoteImage
 import `in`.sms.tringapps.core.designsystem.theme.BrandGradient
-import androidx.compose.material3.Text
 
 private val PosterWidth = 124.dp
 private val PosterHeight = 176.dp
 
-/** Netflix-style ranked Top 10: oversized outlined numerals tucked behind tall posters. */
+/**
+ * Netflix-style ranked Top 10 of the featured playlist: oversized outlined numerals tucked
+ * behind tall posters. The title comes from the config section.
+ */
 @Composable
-fun TrendingRail(
+fun TopTenRail(
+    sectionTitle: String,
     videos: List<Video>,
     onVideoClick: (Video) -> Unit,
+    onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.testTag(HomeTestTags.TRENDING)) {
-        RailHeader(title = stringResource(R.string.home_trending_now))
+    Column(modifier.testTag(HomeTestTags.TOP_TEN)) {
+        RailHeader(
+            title = sectionTitle.ifBlank { stringResource(R.string.home_featured) },
+            onSeeAll = onSeeAll,
+            seeAllTag = HomeTestTags.TOP_TEN_SEE_ALL,
+        )
         Spacer(Modifier.height(8.dp))
         LazyRow(
             contentPadding = RailPadding,

@@ -79,10 +79,19 @@ fun HeroCarousel(
 ) {
     val pagerState = rememberPagerState { videos.size }
     var previewing by remember { mutableStateOf(false) }
+    var isStarted by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleStartEffect(Unit) {
+        isStarted = true
+        onStopOrDispose {
+            isStarted = false
+            previewing = false
+        }
+    }
+    val heroActive = isVisible && isStarted
 
-    LaunchedEffect(pagerState.settledPage, previewEnabled, isVisible, autoAdvance, videos.size) {
+    LaunchedEffect(pagerState.settledPage, previewEnabled, heroActive, autoAdvance, videos.size) {
         previewing = false
-        if (!isVisible) return@LaunchedEffect
+        if (!heroActive) return@LaunchedEffect
         val canPreview = previewEnabled && videos.getOrNull(pagerState.settledPage)?.isPlayable == true
         if (canPreview) {
             delay(PREVIEW_DELAY_MS)
@@ -181,10 +190,17 @@ private fun HeroPage(
                 video.ageRating?.let { MetaChip(it, outlined = true) }
                 durationText(video.durationSeconds)?.let { MetaChip(it, outlined = true) }
             }
-            if (video.description.isNotBlank()) {
+            val heroDescription = remember(video.description) {
+                video.description
+                    .lineSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .joinToString(" · ")
+            }
+            if (heroDescription.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = video.description,
+                    text = heroDescription,
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,

@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
-import `in`.sms.tringapps.catalog.domain.model.Video
 import `in`.sms.tringapps.feature.seeall.presentation.SeeAllRoute
 import kotlinx.serialization.Serializable
 
@@ -16,11 +15,11 @@ fun NavController.navigateToSeeAll(playlistId: String, title: String) {
     navigate(SeeAllDestination(playlistId, title)) { launchSingleTop = true }
 }
 
-fun NavGraphBuilder.seeAllScreen(onBack: () -> Unit, onPlay: (Video) -> Unit) {
+fun NavGraphBuilder.seeAllScreen(onBack: () -> Unit, onOpenDetails: (mediaId: String) -> Unit) {
     composable<SeeAllDestination>(
         enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start) },
         popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End) },
     ) {
-        SeeAllRoute(onBack = onBack, onPlay = onPlay)
+        SeeAllRoute(onBack = onBack, onOpenDetails = { onOpenDetails(it.mediaId) })
     }
 }

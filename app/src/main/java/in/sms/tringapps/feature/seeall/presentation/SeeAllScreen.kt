@@ -22,10 +22,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -38,6 +34,7 @@ import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import `in`.sms.tringapps.R
 import `in`.sms.tringapps.catalog.domain.model.Video
 import `in`.sms.tringapps.core.designsystem.component.GradientButton
@@ -47,7 +44,6 @@ import `in`.sms.tringapps.core.designsystem.theme.TextSecondary
 import `in`.sms.tringapps.core.ui.BackTopBar
 import `in`.sms.tringapps.core.ui.VideoCard
 import `in`.sms.tringapps.core.ui.VideoCardPlaceholder
-import `in`.sms.tringapps.core.ui.VideoDetailsSheet
 import kotlinx.coroutines.flow.Flow
 
 object SeeAllTestTags {
@@ -63,10 +59,10 @@ object SeeAllTestTags {
 @Composable
 fun SeeAllRoute(
     onBack: () -> Unit,
-    onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     viewModel: SeeAllViewModel = hiltViewModel(),
 ) {
-    SeeAllScreen(title = viewModel.title, videos = viewModel.videos, onBack = onBack, onPlay = onPlay)
+    SeeAllScreen(title = viewModel.title, videos = viewModel.videos, onBack = onBack, onOpenDetails = onOpenDetails)
 }
 
 /** Paged vertical grid of a whole playlist. */
@@ -75,11 +71,10 @@ fun SeeAllScreen(
     title: String,
     videos: Flow<PagingData<Video>>,
     onBack: () -> Unit,
-    onPlay: (Video) -> Unit,
+    onOpenDetails: (Video) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = videos.collectAsLazyPagingItems()
-    var selected by remember { mutableStateOf<Video?>(null) }
 
     Column(
         modifier
@@ -104,19 +99,8 @@ fun SeeAllScreen(
             )
             items.itemCount == 0 && refresh is LoadState.NotLoading && items.loadState.append.endOfPaginationReached ->
                 Message(text = stringResource(R.string.see_all_empty), tag = SeeAllTestTags.EMPTY)
-            else -> VideoGrid(items, onVideoClick = { selected = it })
+            else -> VideoGrid(items, onVideoClick = onOpenDetails)
         }
-    }
-
-    selected?.let { video ->
-        VideoDetailsSheet(
-            video = video,
-            onPlay = {
-                selected = null
-                onPlay(it)
-            },
-            onDismiss = { selected = null },
-        )
     }
 }
 
@@ -137,7 +121,7 @@ private fun VideoGrid(items: LazyPagingItems<Video>, onVideoClick: (Video) -> Un
             .fillMaxSize()
             .testTag(SeeAllTestTags.GRID),
     ) {
-        items(count = items.itemCount, contentType = { "video" }) { index ->
+        items(count = items.itemCount, key = items.itemKey { it.mediaId }, contentType = { "video" }) { index ->
             items[index]?.let { VideoCard(video = it, onClick = onVideoClick) }
         }
         when (items.loadState.append) {

@@ -6,16 +6,13 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import `in`.sms.tringapps.catalog.domain.model.Playlist
-import `in`.sms.tringapps.catalog.domain.model.Section
 import `in`.sms.tringapps.catalog.domain.model.Video
-import `in`.sms.tringapps.catalog.domain.usecase.GetHomeSectionsUseCase
+import `in`.sms.tringapps.catalog.domain.usecase.GetHomeContentUseCase
 import `in`.sms.tringapps.catalog.domain.usecase.GetPagedPlaylistUseCase
 import `in`.sms.tringapps.catalog.domain.usecase.GetPlayablePlaylistUseCase
-import `in`.sms.tringapps.catalog.domain.usecase.GetTrendingUseCase
 import `in`.sms.tringapps.library.domain.model.ContinueWatchingItem
 import `in`.sms.tringapps.library.domain.usecase.ObserveContinueWatchingUseCase
 import `in`.sms.tringapps.library.domain.usecase.ObserveMyListUseCase
-import `in`.sms.tringapps.library.domain.usecase.ToggleMyListUseCase
 import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -33,13 +30,11 @@ import kotlinx.coroutines.sync.withPermit
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val getHomeSections: GetHomeSectionsUseCase,
+    private val getHomeContent: GetHomeContentUseCase,
     private val getPlayablePlaylist: GetPlayablePlaylistUseCase,
     private val getPagedPlaylist: GetPagedPlaylistUseCase,
-    private val getTrending: GetTrendingUseCase,
     observeContinueWatching: ObserveContinueWatchingUseCase,
     observeMyList: ObserveMyListUseCase,
-    private val toggleMyListUseCase: ToggleMyListUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
@@ -55,116 +50,119 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             combine(observeContinueWatching(), observeMyList(), ::Library).collect { latest ->
                 library = latest
-                _uiState.update { state ->
-                    if (state is HomeUiState.Content) {
-                        state.copy(continueWatching = latest.continueWatching, myList = latest.myList)
-                    } else {
-                        state
-                    }
-                }
+                _uiState.update { (it as? HomeUiState.Content)?.withLibrary() ?: it }
             }
         }
-        load()
+        load(isRefresh = false)
     }
 
-    fun retry() = load()
+    fun retry() = load(isRefresh = false)
 
-    /** Paged items of one rail; cached so scrolling position survives recomposition. */
+    /** Pull-to-refresh: refetches everything but keeps the current content until it's replaced. */
+    fun refresh() = load(isRefresh = true)
+
+    fun onRefreshErrorShown() {
+        _uiState.update { (it as? HomeUiState.Content)?.copy(refreshError = null) ?: it }
+    }
+
+    /** Paged items of one rail; cached so scroll position and loaded pages survive recomposition. */
     fun railPaging(playlistId: String): Flow<PagingData<Video>> =
         railPagingFlows.getOrPut(playlistId) { getPagedPlaylist(playlistId).cachedIn(viewModelScope) }
 
-    fun toggleMyList(video: Video) {
-        viewModelScope.launch { toggleMyListUseCase(video) }
-    }
-
-    private fun load() {
+    private fun load(isRefresh: Boolean) {
         loadJob?.cancel()
-        railPagingFlows.clear()
         loadJob = viewModelScope.launch {
-            _uiState.value = HomeUiState.Loading
+            val previous = (_uiState.value as? HomeUiState.Content)?.takeIf { isRefresh }
+            _uiState.value = previous?.copy(isRefreshing = true, refreshError = null) ?: HomeUiState.Loading
 
-            val sections = getHomeSections().getOrElse {
-                _uiState.value = HomeUiState.Error(it.toErrorKind())
+            val layout = getHomeContent(forceRefresh = isRefresh).getOrElse {
+                fail(it.toErrorKind(), previous)
                 return@launch
             }
-            if (sections.isEmpty()) {
-                _uiState.value = HomeUiState.Error(HomeErrorKind.EMPTY)
+            if (layout.playlists.isEmpty()) {
+                fail(HomeErrorKind.EMPTY, previous)
                 return@launch
             }
 
-            val featuredId = sections.firstOrNull { it.featured }?.playlistId
-            _uiState.value = HomeUiState.Content(
-                hero = emptyList(),
-                rails = sections.map { RailUiState(playlistId = it.playlistId, title = it.title) },
-                continueWatching = library.continueWatching,
-                myList = library.myList,
+            railPagingFlows.clear()
+            var content = HomeUiState.Content(
+                featured = null,
+                rails = layout.playlists.map { RailUiState(playlistId = it.playlistId, title = it.title) },
+                continueWatchingTitle = layout.continueWatching?.title,
+                myListTitle = layout.favorites?.title,
             )
-
-            val trending = async {
-                getTrending().getOrNull().orEmpty().also { videos ->
-                    _uiState.update { (it as? HomeUiState.Content)?.copy(trending = videos) ?: it }
-                }
+            // First load renders progressively; a refresh swaps in the result at the end.
+            fun publish() {
+                if (previous == null) _uiState.value = content.withLibrary()
             }
+            publish()
+
             val gate = Semaphore(MAX_PARALLEL_REQUESTS)
-            val results = sections.map { section ->
+            val results = layout.playlists.map { section ->
                 async {
-                    gate.withPermit { getPlayablePlaylist(section.playlistId) }
-                        .also { onRailResult(section, it, featuredId) }
-                }
-            }.awaitAll()
-            trending.await()
-
-            val content = _uiState.value as? HomeUiState.Content ?: return@launch
-            if (content.rails.isEmpty() && content.trending.isEmpty()) {
-                val firstFailure = results.firstNotNullOfOrNull { it.exceptionOrNull() }
-                _uiState.value = HomeUiState.Error(
-                    if (results.all { it.isFailure } && firstFailure != null) {
-                        firstFailure.toErrorKind()
-                    } else {
-                        HomeErrorKind.EMPTY
-                    },
-                )
-            }
-        }
-    }
-
-    private fun onRailResult(section: Section, result: Result<Playlist>, featuredId: String?) {
-        _uiState.update { state ->
-            if (state !is HomeUiState.Content) return@update state
-            val playlist = result.getOrNull()
-            val rails = if (playlist == null || playlist.videos.isEmpty()) {
-                state.rails.filterNot { it.playlistId == section.playlistId }
-            } else {
-                state.rails.map { rail ->
-                    if (rail.playlistId != section.playlistId) {
-                        rail
-                    } else {
-                        rail.copy(
-                            title = rail.title.ifBlank { playlist.title },
-                            videos = playlist.videos,
-                            isLoading = false,
-                        )
+                    gate.withPermit { getPlayablePlaylist(section.playlistId) }.also { result ->
+                        content = content.withRailResult(section.playlistId, result, layout.featuredPlaylistId)
+                        publish()
                     }
                 }
+            }.awaitAll()
+
+            if (content.rails.isEmpty()) {
+                val failure = results.firstNotNullOfOrNull { it.exceptionOrNull() }
+                fail(
+                    if (results.all { it.isFailure } && failure != null) failure.toErrorKind() else HomeErrorKind.EMPTY,
+                    previous,
+                )
+            } else {
+                _uiState.value = content.withLibrary()
             }
-            state.copy(rails = rails, hero = state.hero.ifEmpty { pickHero(rails, featuredId) })
         }
+    }
+
+    private fun fail(kind: HomeErrorKind, previous: HomeUiState.Content?) {
+        _uiState.value = previous?.copy(isRefreshing = false, refreshError = kind) ?: HomeUiState.Error(kind)
+    }
+
+    private fun HomeUiState.Content.withLibrary() =
+        copy(continueWatching = library.continueWatching, myList = library.myList)
+
+    private fun HomeUiState.Content.withRailResult(
+        playlistId: String,
+        result: Result<Playlist>,
+        featuredId: String?,
+    ): HomeUiState.Content {
+        val playlist = result.getOrNull()
+        val updated = if (playlist == null || playlist.videos.isEmpty()) {
+            rails.filterNot { it.playlistId == playlistId }
+        } else {
+            rails.map { rail ->
+                if (rail.playlistId != playlistId) {
+                    rail
+                } else {
+                    rail.copy(title = rail.title.ifBlank { playlist.title }, videos = playlist.videos, isLoading = false)
+                }
+            }
+        }
+        return copy(rails = updated, featured = featured ?: pickFeatured(updated, featuredId))
     }
 
     /**
-     * Hero items come from the featured playlist; if it has nothing playable (or there is
-     * none), the first loaded rail is used instead. Waits for the featured rail first.
+     * The config's featured playlist drives the hero and Top 10. If it is missing or has
+     * nothing playable, the first loaded playlist in config order is used.
      */
-    private fun pickHero(rails: List<RailUiState>, featuredId: String?) =
-        rails.firstOrNull { it.playlistId == featuredId }
-            ?.let { featured -> if (featured.isLoading) emptyList() else featured.videos.take(HERO_SIZE) }
-            ?: rails.firstOrNull { !it.isLoading }?.videos?.take(HERO_SIZE).orEmpty()
+    private fun pickFeatured(rails: List<RailUiState>, featuredId: String?): FeaturedUiState? {
+        val preferred = rails.firstOrNull { it.playlistId == featuredId }
+        if (preferred != null) {
+            return if (preferred.isLoading) null else FeaturedUiState(preferred.playlistId, preferred.title, preferred.videos)
+        }
+        val fallback = rails.firstOrNull { !it.isLoading && it.videos.isNotEmpty() } ?: return null
+        return FeaturedUiState(fallback.playlistId, fallback.title, fallback.videos)
+    }
 
     private fun Throwable.toErrorKind() =
         if (this is IOException) HomeErrorKind.NETWORK else HomeErrorKind.GENERIC
 
     companion object {
-        const val MAX_PARALLEL_REQUESTS = 6
-        const val HERO_SIZE = 5
+        const val MAX_PARALLEL_REQUESTS = 10
     }
 }

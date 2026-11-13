@@ -32,10 +32,10 @@ class SeeAllScreenTest {
     private fun setScreen(
         videos: Flow<PagingData<Video>>,
         onBack: () -> Unit = {},
-        onPlay: (Video) -> Unit = {},
+        onOpenDetails: (Video) -> Unit = {},
     ) = composeRule.setContent {
         TringappsTheme {
-            SeeAllScreen(title = "Novedades en cine", videos = videos, onBack = onBack, onPlay = onPlay)
+            SeeAllScreen(title = "Novedades en cine", videos = videos, onBack = onBack, onOpenDetails = onOpenDetails)
         }
     }
 
@@ -94,17 +94,15 @@ class SeeAllScreenTest {
     }
 
     @Test
-    fun itemClick_opensDetailsAndPlays() {
-        var played: Video? = null
+    fun itemClick_opensDetails() {
+        var opened: Video? = null
         val video = testVideo("a")
-        setScreen(flowOf(PagingData.from(listOf(video))), onPlay = { played = it })
+        setScreen(flowOf(PagingData.from(listOf(video))), onOpenDetails = { opened = it })
         awaitTag(CatalogTestTags.videoCard("a"))
 
         composeRule.onNodeWithTag(CatalogTestTags.videoCard("a")).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(CatalogTestTags.DETAILS_PLAY).performClick()
 
-        assertEquals(video, played)
+        assertEquals(video, opened)
     }
 
     @Test

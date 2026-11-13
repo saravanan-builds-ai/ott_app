@@ -63,13 +63,24 @@ fun MediaItemDto.toVideoOrNull(): Video? {
     return Video(
         mediaId = id,
         title = title?.trim().orEmpty(),
-        description = description?.trim().orEmpty(),
+        description = description.cleanDescription(),
         thumbnailUrl = images.pickImage(THUMBNAIL_WIDTH) ?: image.validUrlOrNull(),
         backdropUrl = images.pickImage(BACKDROP_WIDTH) ?: image.validUrlOrNull(),
         durationSeconds = duration?.takeIf { it > 0 }?.toLong() ?: 0L,
         ageRating = agerating?.trim()?.takeIf { it.isNotEmpty() },
         stream = sources.selectStream(),
     )
+}
+
+/**
+ * Strips whitespace and treats placeholder-only strings (e.g. `"..."`, `"…"`, `"-"` or `"N/A"`)
+ * as empty so UI components don't render meaningless text when a description is missing.
+ */
+internal fun String?.cleanDescription(): String {
+    val trimmed = this?.trim().orEmpty()
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.equals("n/a", ignoreCase = true) || trimmed.equals("none", ignoreCase = true)) return ""
+    return if (trimmed.any { it.isLetterOrDigit() }) trimmed else ""
 }
 
 /**

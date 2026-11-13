@@ -16,7 +16,6 @@ import `in`.sms.tringapps.core.common.IoDispatcher
 import `in`.sms.tringapps.core.common.suspendRunCatching
 import `in`.sms.tringapps.core.network.JwConfigId
 import `in`.sms.tringapps.core.network.JwPlayerApi
-import `in`.sms.tringapps.core.network.JwTrendingPlaylistId
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,7 +27,6 @@ import kotlinx.coroutines.withContext
 class CatalogRepositoryImpl @Inject constructor(
     private val api: JwPlayerApi,
     @param:JwConfigId private val configId: String,
-    @param:JwTrendingPlaylistId private val trendingPlaylistId: String,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
 
@@ -72,9 +70,6 @@ class CatalogRepositoryImpl @Inject constructor(
             },
         ).flow
 
-    override suspend fun getTrending(limit: Int): Result<List<Video>> =
-        getPlaylistPage(trendingPlaylistId, offset = 1, limit = limit).map { it.playlist.videos }
-
     override suspend fun getVideo(mediaId: String): Result<Video> {
         videoCache[mediaId]?.let { return Result.success(it) }
         return withContext(ioDispatcher) {
@@ -87,4 +82,9 @@ class CatalogRepositoryImpl @Inject constructor(
     }
 
     override fun cachedVideos(): List<Video> = synchronized(videoCache) { videoCache.values.toList() }
+
+    override fun clearCache() {
+        pageCache.clear()
+        videoCache.clear()
+    }
 }

@@ -9,7 +9,8 @@ object HomeTestTags {
     const val HERO_INFO = "home_hero_info"
     const val LIST = "home_list"
     const val SEARCH = "home_search"
-    const val TRENDING = "home_trending"
+    const val TOP_TEN = "home_top_ten"
+    const val TOP_TEN_SEE_ALL = "home_top_ten_see_all"
     const val CONTINUE_WATCHING = "home_continue_watching"
     const val MY_LIST = "home_my_list"
 

@@ -39,9 +39,16 @@ fun MutedPreviewPlayer(
 
     val player = remember(video.mediaId) {
         ExoPlayer.Builder(context).build().apply {
+            setAudioAttributes(
+                androidx.media3.common.AudioAttributes.DEFAULT,
+                /* handleAudioFocus = */ false,
+            )
             volume = 0f
             repeatMode = Player.REPEAT_MODE_ONE
-            trackSelectionParameters = trackSelectionParameters.buildUpon().setMaxVideoSizeSd().build()
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setMaxVideoSizeSd()
+                .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, true)
+                .build()
             setMediaItem(mediaItem, startPositionMs)
             playWhenReady = true
             prepare()

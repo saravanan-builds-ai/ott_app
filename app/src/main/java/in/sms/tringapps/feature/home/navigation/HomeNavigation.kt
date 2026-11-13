@@ -10,10 +10,16 @@ data object HomeDestination
 
 fun NavGraphBuilder.homeScreen(
     onPlay: (mediaId: String) -> Unit,
+    onOpenDetails: (mediaId: String) -> Unit,
     onSeeAll: (playlistId: String, title: String) -> Unit,
     onSearch: () -> Unit,
 ) {
     composable<HomeDestination> {
-        HomeRoute(onPlay = { onPlay(it.mediaId) }, onSeeAll = onSeeAll, onSearch = onSearch)
+        HomeRoute(
+            onPlay = { onPlay(it.mediaId) },
+            onOpenDetails = { onOpenDetails(it.mediaId) },
+            onSeeAll = onSeeAll,
+            onSearch = onSearch,
+        )
     }
 }

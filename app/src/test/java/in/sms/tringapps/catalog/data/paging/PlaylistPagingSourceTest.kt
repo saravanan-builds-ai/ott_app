@@ -52,6 +52,23 @@ class PlaylistPagingSourceTest {
     }
 
     @Test
+    fun `items repeated on a later page are dropped so keys stay unique`() = runTest {
+        val source = PlaylistPagingSource { offset, _ ->
+            val page = if (offset == 1) {
+                testPlaylist("P", testVideo("a"), testVideo("b"))
+            } else {
+                testPlaylist("P", testVideo("b"), testVideo("c"))
+            }
+            Result.success(PlaylistPage(page, nextOffset = if (offset == 1) 3 else null))
+        }
+        val pager = TestPager(config, source)
+        pager.refresh()
+        val second = pager.append() as PagingSource.LoadResult.Page
+
+        assertEquals(listOf("c"), second.data.map { it.mediaId })
+    }
+
+    @Test
     fun `failure becomes a load error`() = runTest {
         val pager = TestPager(config, source(failAt = 3))
         pager.refresh()

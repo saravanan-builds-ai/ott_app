@@ -108,11 +108,21 @@ class CatalogMapperTest {
     @Test
     fun `media item without id is dropped and unknown duration is zero`() {
         assertNull(MediaItemDto(mediaid = "").toVideoOrNull())
-        val series = MediaItemDto(mediaid = "s", duration = 0.0, agerating = "", sources = emptyList())
+        val series = MediaItemDto(mediaid = "s", description = " ... ", duration = 0.0, agerating = "", sources = emptyList())
         val video = series.toVideoOrNull()!!
+        assertEquals("", video.description)
         assertEquals(0L, video.durationSeconds)
         assertNull(video.ageRating)
         assertFalse(video.isPlayable)
+    }
+
+    @Test
+    fun `cleanDescription strips placeholder strings without letters or digits`() {
+        assertEquals("", "...".cleanDescription())
+        assertEquals("", " … — - ".cleanDescription())
+        assertEquals("", "None".cleanDescription())
+        assertEquals("", "N/A".cleanDescription())
+        assertEquals("Drama", "  Drama  ".cleanDescription())
     }
 
     @Test

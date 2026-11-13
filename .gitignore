@@ -11,8 +11,13 @@ local.properties
 .externalNativeBuild
 .cxx
 
-# Secrets — never commit
+# Secrets & local agent config — never commit
 *.jks
 *.keystore
 keystore.properties
 google-services.json
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
+.gemini/
