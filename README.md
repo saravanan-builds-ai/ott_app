@@ -148,13 +148,14 @@ in.sms.tringapps
 
 ## JW Player API Integration
 
-```mermaid
-flowchart LR
-    Config["GET /apps/configs/kxqzxtpq.json"] --> HomeUseCase["GetHomeContentUseCase"]
-    HomeUseCase -->|playlistId| PlaylistAPI["GET /v2/playlists/{id}?page_offset=1&page_limit=25"]
-    PlaylistAPI -->|links.next| Paging["PlaylistPagingSource (Paging 3)"]
-    PlaylistAPI -->|sources[]| StreamSelector["HLS (.m3u8) -> MP4 Fallback"]
-    StreamSelector --> Player["Media3 ExoPlayer"]
+```text
+GET /apps/configs/kxqzxtpq.json
+  │
+  ▼
+GetHomeContentUseCase  ──(content[].contentId)──►  GET /v2/playlists/{id}?page_offset=1&page_limit=25
+                                                     │
+                                                     ├──► links.next  ──► PlaylistPagingSource (Paging 3)
+                                                     └──► sources[]   ──► HLS (.m3u8) / MP4 Fallback ──► Media3 ExoPlayer
 ```
 
 1. **App Config (`GET apps/configs/kxqzxtpq.json`)**
